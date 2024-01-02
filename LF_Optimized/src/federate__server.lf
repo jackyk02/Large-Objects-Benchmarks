@@ -1,0 +1,490 @@
+target Python {
+  _fed_setup: "include/_federate__server_preamble.h",
+  compile-definitions: {
+    EXECUTABLE_PREAMBLE: "",
+    NUMBER_OF_FEDERATES: "5",
+    FEDERATED: "",
+    FEDERATED_CENTRALIZED: ""
+  },
+  keepalive: true,
+  threading: true,
+  coordination: "centralized"
+}
+
+
+NONE preamble {=
+import time
+import numpy as np
+import pyarrow.plasma as plasma
+session = plasma.connect("/tmp/plasma")
+import pickle
+
+def serialization(session, data):
+    buffer = []
+    pickled_data = pickle.dumps(data, protocol=5, buffer_callback=buffer.append)
+    data_object_id = session.put(pickled_data)
+
+    # Store memoryview in Plasma
+    mem_view = buffer[0].raw()
+    buffer_id = plasma.ObjectID.from_random()
+    data_size = len(mem_view)
+
+    # Create an object in Plasma and copy the memoryview data into it
+    plasma_object = session.create(buffer_id, data_size)
+    plasma_view = memoryview(plasma_object).cast('B')
+    plasma_view[:] = mem_view[:]
+
+    session.seal(buffer_id)
+
+    # Return
+    return [data_object_id, buffer_id]
+
+def deserialization(session, data_object_id, buffer_id):
+    #memory getting
+    buffer = session.get_buffers([buffer_id])
+    pickled_data = session.get(data_object_id)
+    data = pickle.loads(pickled_data, buffers=buffer)
+    return data
+=}
+preamble {=
+import gc
+import atexit
+gc.disable()
+atexit.register(os._exit, 0)
+
+=}
+
+reactor serverReactor {
+  output global_parameters
+  input[4] updated_parameters
+  state round_num
+  state start_time
+  state prev_time
+
+  reaction(startup) ->
+  global_parameters {=
+    self.round_num = 0
+    self.results = [0] * 4
+    self.start_time = None
+    self.prev_time = None
+    val = np.ones(1310720)
+    id  = serialization(session, val)
+    global_parameters.set(id)
+  =}
+
+  reaction(updated_parameters) ->
+  global_parameters {=
+    # Retrieve value from each client
+    for i in range(4):
+        data_pair = updated_parameters[i].value
+        self.results[i] = deserialization(session, data_pair[0], data_pair[1])
+
+    # Check and set the benchmark start time for the first round
+    if self.round_num == 0:
+        self.start_time = time.time()
+        self.prev_time = self.start_time
+
+    # print round number
+    print("Episode: "+str(self.round_num))
+    self.round_num += 1
+
+    # print Time Taken
+    cur_time = time.time()
+    print(f"Time taken: {cur_time - self.start_time:.2f} seconds")
+    print(f"Overhead: {cur_time - self.prev_time - 0.5:.2f} seconds\n")
+    self.prev_time = cur_time
+
+    # Update the global parameters with the results from the first client for the next round
+    id = serialization(session, self.results[0].copy())
+    global_parameters.set(id)
+  =}
+}
+reactor _serverupdated_parameters {
+  input port0
+
+  input port1
+
+  input port2
+
+  input port3
+
+  output[4] port
+
+  port0, port1, port2, port3 -> port
+}
+@_networkReactor("receiver")
+reactor NetworkReceiver_0 {
+  output msg
+
+  logical action networkMessage
+
+  @_c_body
+  reaction(startup) {=
+    self->_lf__reaction_1.is_an_input_reaction = true;
+  =}
+
+  @_c_body
+  reaction(networkMessage) -> msg {=
+    // Acquire the GIL (Global Interpreter Lock) to be able to call Python APIs.
+    PyGILState_STATE gstate;
+    gstate = PyGILState_Ensure();
+    msg->physical_time_of_arrival = self->_lf__networkMessage.physical_time_of_arrival;
+    PyObject* message_byte_array = PyBytes_FromStringAndSize((char*)networkMessage->token->value, networkMessage->token->length);
+    PyObject* deserialized_message = PyObject_CallMethod(global_pickler, "loads", "O", message_byte_array);
+    if (deserialized_message == NULL) {
+        if (PyErr_Occurred()) PyErr_Print();
+        lf_print_error_and_exit("Could not deserialize deserialized_message.");
+    }
+    Py_XDECREF(message_byte_array);
+    lf_token_t* token = lf_new_token((void*)msg, deserialized_message, 1);
+    lf_set_destructor(msg, python_count_decrement);
+    lf_set_token(msg, token);
+    /* Release the thread. No Python API allowed beyond this point. */
+    PyGILState_Release(gstate);
+  =}
+}
+@_networkReactor("receiver")
+reactor NetworkReceiver_1 {
+  output msg
+
+  logical action networkMessage
+
+  @_c_body
+  reaction(startup) {=
+    self->_lf__reaction_1.is_an_input_reaction = true;
+  =}
+
+  @_c_body
+  reaction(networkMessage) -> msg {=
+    // Acquire the GIL (Global Interpreter Lock) to be able to call Python APIs.
+    PyGILState_STATE gstate;
+    gstate = PyGILState_Ensure();
+    msg->physical_time_of_arrival = self->_lf__networkMessage.physical_time_of_arrival;
+    PyObject* message_byte_array = PyBytes_FromStringAndSize((char*)networkMessage->token->value, networkMessage->token->length);
+    PyObject* deserialized_message = PyObject_CallMethod(global_pickler, "loads", "O", message_byte_array);
+    if (deserialized_message == NULL) {
+        if (PyErr_Occurred()) PyErr_Print();
+        lf_print_error_and_exit("Could not deserialize deserialized_message.");
+    }
+    Py_XDECREF(message_byte_array);
+    lf_token_t* token = lf_new_token((void*)msg, deserialized_message, 1);
+    lf_set_destructor(msg, python_count_decrement);
+    lf_set_token(msg, token);
+    /* Release the thread. No Python API allowed beyond this point. */
+    PyGILState_Release(gstate);
+  =}
+}
+@_networkReactor("receiver")
+reactor NetworkReceiver_2 {
+  output msg
+
+  logical action networkMessage
+
+  @_c_body
+  reaction(startup) {=
+    self->_lf__reaction_1.is_an_input_reaction = true;
+  =}
+
+  @_c_body
+  reaction(networkMessage) -> msg {=
+    // Acquire the GIL (Global Interpreter Lock) to be able to call Python APIs.
+    PyGILState_STATE gstate;
+    gstate = PyGILState_Ensure();
+    msg->physical_time_of_arrival = self->_lf__networkMessage.physical_time_of_arrival;
+    PyObject* message_byte_array = PyBytes_FromStringAndSize((char*)networkMessage->token->value, networkMessage->token->length);
+    PyObject* deserialized_message = PyObject_CallMethod(global_pickler, "loads", "O", message_byte_array);
+    if (deserialized_message == NULL) {
+        if (PyErr_Occurred()) PyErr_Print();
+        lf_print_error_and_exit("Could not deserialize deserialized_message.");
+    }
+    Py_XDECREF(message_byte_array);
+    lf_token_t* token = lf_new_token((void*)msg, deserialized_message, 1);
+    lf_set_destructor(msg, python_count_decrement);
+    lf_set_token(msg, token);
+    /* Release the thread. No Python API allowed beyond this point. */
+    PyGILState_Release(gstate);
+  =}
+}
+@_networkReactor("receiver")
+reactor NetworkReceiver_3 {
+  output msg
+
+  logical action networkMessage
+
+  @_c_body
+  reaction(startup) {=
+    self->_lf__reaction_1.is_an_input_reaction = true;
+  =}
+
+  @_c_body
+  reaction(networkMessage) -> msg {=
+    // Acquire the GIL (Global Interpreter Lock) to be able to call Python APIs.
+    PyGILState_STATE gstate;
+    gstate = PyGILState_Ensure();
+    msg->physical_time_of_arrival = self->_lf__networkMessage.physical_time_of_arrival;
+    PyObject* message_byte_array = PyBytes_FromStringAndSize((char*)networkMessage->token->value, networkMessage->token->length);
+    PyObject* deserialized_message = PyObject_CallMethod(global_pickler, "loads", "O", message_byte_array);
+    if (deserialized_message == NULL) {
+        if (PyErr_Occurred()) PyErr_Print();
+        lf_print_error_and_exit("Could not deserialize deserialized_message.");
+    }
+    Py_XDECREF(message_byte_array);
+    lf_token_t* token = lf_new_token((void*)msg, deserialized_message, 1);
+    lf_set_destructor(msg, python_count_decrement);
+    lf_set_token(msg, token);
+    /* Release the thread. No Python API allowed beyond this point. */
+    PyGILState_Release(gstate);
+  =}
+}
+@_networkReactor("sender")
+reactor NetworkSender_0<SENDERINDEXPARAMETER> {
+  input[1] msg
+
+  @_c_body
+  reaction(startup) {=
+    extern reaction_t* port_absent_reaction[];
+    void enqueue_port_absent_reactions(environment_t*);
+    LF_PRINT_DEBUG("Adding network port absent reaction to table.");
+    port_absent_reaction[SENDERINDEXPARAMETER] = &self->_lf__reaction_2;
+    LF_PRINT_DEBUG("Added network output control reaction to table. Enqueueing it...");
+    enqueue_port_absent_reactions(self->base.environment);
+  =}
+
+  @_c_body
+  reaction(msg) {=
+    // Acquire the GIL (Global Interpreter Lock) to be able to call Python APIs.
+    PyGILState_STATE gstate;
+    gstate = PyGILState_Ensure();
+    // Sending from msg[0] in federate federate__server to client.global_parameters in federate federate__client__0
+    if (!msg[0]->is_present) {
+    PyGILState_Release(gstate);
+    return;
+    }
+    if (global_pickler == NULL) lf_print_error_and_exit("The pickle module is not loaded.");
+    PyObject* serialized_pyobject = PyObject_CallMethod(global_pickler, "dumps", "O", msg[0]->value);
+    if (serialized_pyobject == NULL) {
+        if (PyErr_Occurred()) PyErr_Print();
+        lf_print_error_and_exit("Could not serialize serialized_pyobject.");
+    }
+    Py_buffer serialized_message;
+    int returnValue = PyBytes_AsStringAndSize(serialized_pyobject, &serialized_message.buf, &serialized_message.len);
+    if (returnValue == -1) {
+        if (PyErr_Occurred()) PyErr_Print();
+        lf_print_error_and_exit("Could not serialize serialized_message.");
+    }
+    size_t _lf_message_length = serialized_message.len;
+    send_timed_message(self->base.environment, 0, MSG_TYPE_TAGGED_MESSAGE, 0, 0, "federate 0 via the RTI", _lf_message_length, serialized_message.buf);
+    Py_XDECREF(serialized_pyobject);
+    /* Release the thread. No Python API allowed beyond this point. */
+    PyGILState_Release(gstate);
+  =}
+
+  @_c_body
+  reaction() msg {=
+    // If the output port has not been lf_set for the current logical time,
+    // send an ABSENT message to the receiving federate
+    LF_PRINT_LOG("Executing port absent reaction for port %d to federate %d at time %lld.",
+              0, 0, (long long) lf_time_logical_elapsed());
+    if (msg[0] == NULL || !msg[0]->is_present) {
+    LF_PRINT_LOG("The output port is NULL or it is not present.");
+        send_port_absent_to_federate(self->base.environment, 0, 0, 0);
+    }
+  =}
+}
+@_networkReactor("sender")
+reactor NetworkSender_1<SENDERINDEXPARAMETER> {
+  input[1] msg
+
+  @_c_body
+  reaction(startup) {=
+    extern reaction_t* port_absent_reaction[];
+    void enqueue_port_absent_reactions(environment_t*);
+    LF_PRINT_DEBUG("Adding network port absent reaction to table.");
+    port_absent_reaction[SENDERINDEXPARAMETER] = &self->_lf__reaction_2;
+    LF_PRINT_DEBUG("Added network output control reaction to table. Enqueueing it...");
+    enqueue_port_absent_reactions(self->base.environment);
+  =}
+
+  @_c_body
+  reaction(msg) {=
+    // Acquire the GIL (Global Interpreter Lock) to be able to call Python APIs.
+    PyGILState_STATE gstate;
+    gstate = PyGILState_Ensure();
+    // Sending from msg[0] in federate federate__server to client.global_parameters in federate federate__client__1
+    if (!msg[0]->is_present) {
+    PyGILState_Release(gstate);
+    return;
+    }
+    if (global_pickler == NULL) lf_print_error_and_exit("The pickle module is not loaded.");
+    PyObject* serialized_pyobject = PyObject_CallMethod(global_pickler, "dumps", "O", msg[0]->value);
+    if (serialized_pyobject == NULL) {
+        if (PyErr_Occurred()) PyErr_Print();
+        lf_print_error_and_exit("Could not serialize serialized_pyobject.");
+    }
+    Py_buffer serialized_message;
+    int returnValue = PyBytes_AsStringAndSize(serialized_pyobject, &serialized_message.buf, &serialized_message.len);
+    if (returnValue == -1) {
+        if (PyErr_Occurred()) PyErr_Print();
+        lf_print_error_and_exit("Could not serialize serialized_message.");
+    }
+    size_t _lf_message_length = serialized_message.len;
+    send_timed_message(self->base.environment, 0, MSG_TYPE_TAGGED_MESSAGE, 0, 1, "federate 1 via the RTI", _lf_message_length, serialized_message.buf);
+    Py_XDECREF(serialized_pyobject);
+    /* Release the thread. No Python API allowed beyond this point. */
+    PyGILState_Release(gstate);
+  =}
+
+  @_c_body
+  reaction() msg {=
+    // If the output port has not been lf_set for the current logical time,
+    // send an ABSENT message to the receiving federate
+    LF_PRINT_LOG("Executing port absent reaction for port %d to federate %d at time %lld.",
+              0, 1, (long long) lf_time_logical_elapsed());
+    if (msg[0] == NULL || !msg[0]->is_present) {
+    LF_PRINT_LOG("The output port is NULL or it is not present.");
+        send_port_absent_to_federate(self->base.environment, 0, 0, 1);
+    }
+  =}
+}
+@_networkReactor("sender")
+reactor NetworkSender_2<SENDERINDEXPARAMETER> {
+  input[1] msg
+
+  @_c_body
+  reaction(startup) {=
+    extern reaction_t* port_absent_reaction[];
+    void enqueue_port_absent_reactions(environment_t*);
+    LF_PRINT_DEBUG("Adding network port absent reaction to table.");
+    port_absent_reaction[SENDERINDEXPARAMETER] = &self->_lf__reaction_2;
+    LF_PRINT_DEBUG("Added network output control reaction to table. Enqueueing it...");
+    enqueue_port_absent_reactions(self->base.environment);
+  =}
+
+  @_c_body
+  reaction(msg) {=
+    // Acquire the GIL (Global Interpreter Lock) to be able to call Python APIs.
+    PyGILState_STATE gstate;
+    gstate = PyGILState_Ensure();
+    // Sending from msg[0] in federate federate__server to client.global_parameters in federate federate__client__2
+    if (!msg[0]->is_present) {
+    PyGILState_Release(gstate);
+    return;
+    }
+    if (global_pickler == NULL) lf_print_error_and_exit("The pickle module is not loaded.");
+    PyObject* serialized_pyobject = PyObject_CallMethod(global_pickler, "dumps", "O", msg[0]->value);
+    if (serialized_pyobject == NULL) {
+        if (PyErr_Occurred()) PyErr_Print();
+        lf_print_error_and_exit("Could not serialize serialized_pyobject.");
+    }
+    Py_buffer serialized_message;
+    int returnValue = PyBytes_AsStringAndSize(serialized_pyobject, &serialized_message.buf, &serialized_message.len);
+    if (returnValue == -1) {
+        if (PyErr_Occurred()) PyErr_Print();
+        lf_print_error_and_exit("Could not serialize serialized_message.");
+    }
+    size_t _lf_message_length = serialized_message.len;
+    send_timed_message(self->base.environment, 0, MSG_TYPE_TAGGED_MESSAGE, 0, 2, "federate 2 via the RTI", _lf_message_length, serialized_message.buf);
+    Py_XDECREF(serialized_pyobject);
+    /* Release the thread. No Python API allowed beyond this point. */
+    PyGILState_Release(gstate);
+  =}
+
+  @_c_body
+  reaction() msg {=
+    // If the output port has not been lf_set for the current logical time,
+    // send an ABSENT message to the receiving federate
+    LF_PRINT_LOG("Executing port absent reaction for port %d to federate %d at time %lld.",
+              0, 2, (long long) lf_time_logical_elapsed());
+    if (msg[0] == NULL || !msg[0]->is_present) {
+    LF_PRINT_LOG("The output port is NULL or it is not present.");
+        send_port_absent_to_federate(self->base.environment, 0, 0, 2);
+    }
+  =}
+}
+@_networkReactor("sender")
+reactor NetworkSender_3<SENDERINDEXPARAMETER> {
+  input[1] msg
+
+  @_c_body
+  reaction(startup) {=
+    extern reaction_t* port_absent_reaction[];
+    void enqueue_port_absent_reactions(environment_t*);
+    LF_PRINT_DEBUG("Adding network port absent reaction to table.");
+    port_absent_reaction[SENDERINDEXPARAMETER] = &self->_lf__reaction_2;
+    LF_PRINT_DEBUG("Added network output control reaction to table. Enqueueing it...");
+    enqueue_port_absent_reactions(self->base.environment);
+  =}
+
+  @_c_body
+  reaction(msg) {=
+    // Acquire the GIL (Global Interpreter Lock) to be able to call Python APIs.
+    PyGILState_STATE gstate;
+    gstate = PyGILState_Ensure();
+    // Sending from msg[0] in federate federate__server to client.global_parameters in federate federate__client__3
+    if (!msg[0]->is_present) {
+    PyGILState_Release(gstate);
+    return;
+    }
+    if (global_pickler == NULL) lf_print_error_and_exit("The pickle module is not loaded.");
+    PyObject* serialized_pyobject = PyObject_CallMethod(global_pickler, "dumps", "O", msg[0]->value);
+    if (serialized_pyobject == NULL) {
+        if (PyErr_Occurred()) PyErr_Print();
+        lf_print_error_and_exit("Could not serialize serialized_pyobject.");
+    }
+    Py_buffer serialized_message;
+    int returnValue = PyBytes_AsStringAndSize(serialized_pyobject, &serialized_message.buf, &serialized_message.len);
+    if (returnValue == -1) {
+        if (PyErr_Occurred()) PyErr_Print();
+        lf_print_error_and_exit("Could not serialize serialized_message.");
+    }
+    size_t _lf_message_length = serialized_message.len;
+    send_timed_message(self->base.environment, 0, MSG_TYPE_TAGGED_MESSAGE, 0, 3, "federate 3 via the RTI", _lf_message_length, serialized_message.buf);
+    Py_XDECREF(serialized_pyobject);
+    /* Release the thread. No Python API allowed beyond this point. */
+    PyGILState_Release(gstate);
+  =}
+
+  @_c_body
+  reaction() msg {=
+    // If the output port has not been lf_set for the current logical time,
+    // send an ABSENT message to the receiving federate
+    LF_PRINT_LOG("Executing port absent reaction for port %d to federate %d at time %lld.",
+              0, 3, (long long) lf_time_logical_elapsed());
+    if (msg[0] == NULL || !msg[0]->is_present) {
+    LF_PRINT_LOG("The output port is NULL or it is not present.");
+        send_port_absent_to_federate(self->base.environment, 0, 0, 3);
+    }
+  =}
+}
+@_fed_config()
+main reactor  {
+
+    server = new serverReactor()
+    
+    
+    
+    
+    
+    ns_federate__client__0 = new NetworkSender_0<{= 0 =}>()
+    ns_federate__client__1 = new NetworkSender_1<{= 1 =}>()
+    ns_federate__client__2 = new NetworkSender_2<{= 2 =}>()
+    ns_federate__client__3 = new NetworkSender_3<{= 3 =}>()
+    @_tpoLevel(4)
+    nr_federate__server = new NetworkReceiver_0()
+    @_tpoLevel(4)
+    nr_federate__server_0 = new NetworkReceiver_1()
+    @_tpoLevel(4)
+    nr_federate__server_1 = new NetworkReceiver_2()
+    @_tpoLevel(4)
+    nr_federate__server_2 = new NetworkReceiver_3()
+    _serverupdated_parameters0 = new _serverupdated_parameters()
+    _serverupdated_parameters0.port -> server.updated_parameters
+    nr_federate__server.msg -> _serverupdated_parameters0.port0
+    nr_federate__server_0.msg -> _serverupdated_parameters0.port1
+    nr_federate__server_1.msg -> _serverupdated_parameters0.port2
+    nr_federate__server_2.msg -> _serverupdated_parameters0.port3
+    server.global_parameters -> ns_federate__client__0.msg
+    server.global_parameters -> ns_federate__client__1.msg
+    server.global_parameters -> ns_federate__client__2.msg
+    server.global_parameters -> ns_federate__client__3.msg
+}

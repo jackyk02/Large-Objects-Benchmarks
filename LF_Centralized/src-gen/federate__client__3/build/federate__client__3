@@ -1,0 +1,2 @@
+#!/bin/sh
+        /usr/local/bin/python3.10 /mnt/c/Users/jacky/Desktop/simple_multi/fed-gen/workers4_ros_centra/src-gen/federate__client__3/federate__client__3.py "$@"

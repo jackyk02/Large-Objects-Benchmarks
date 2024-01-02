@@ -1,0 +1,61 @@
+Performing C SOURCE FILE Test CMAKE_HAVE_LIBC_PTHREAD failed with the following output:
+Change Dir: /mnt/c/Users/jacky/Desktop/simple_multi/fed-gen/workers4_ros/src-gen/federate__client__2/build/CMakeFiles/CMakeScratch/TryCompile-2Hshnb
+
+Run Build Command(s):/usr/bin/make -f Makefile cmTC_e3c46/fast && /usr/bin/make  -f CMakeFiles/cmTC_e3c46.dir/build.make CMakeFiles/cmTC_e3c46.dir/build
+make[1]: Entering directory '/mnt/c/Users/jacky/Desktop/simple_multi/fed-gen/workers4_ros/src-gen/federate__client__2/build/CMakeFiles/CMakeScratch/TryCompile-2Hshnb'
+Building C object CMakeFiles/cmTC_e3c46.dir/src.c.o
+/usr/bin/gcc -DCMAKE_HAVE_LIBC_PTHREAD  -fPIE -std=gnu11 -o CMakeFiles/cmTC_e3c46.dir/src.c.o -c /mnt/c/Users/jacky/Desktop/simple_multi/fed-gen/workers4_ros/src-gen/federate__client__2/build/CMakeFiles/CMakeScratch/TryCompile-2Hshnb/src.c
+Linking C executable cmTC_e3c46
+/usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_e3c46.dir/link.txt --verbose=1
+/usr/bin/gcc CMakeFiles/cmTC_e3c46.dir/src.c.o -o cmTC_e3c46 
+/usr/bin/ld: CMakeFiles/cmTC_e3c46.dir/src.c.o: in function `main':
+src.c:(.text+0x46): undefined reference to `pthread_create'
+/usr/bin/ld: src.c:(.text+0x52): undefined reference to `pthread_detach'
+/usr/bin/ld: src.c:(.text+0x5e): undefined reference to `pthread_cancel'
+/usr/bin/ld: src.c:(.text+0x6f): undefined reference to `pthread_join'
+collect2: error: ld returned 1 exit status
+make[1]: *** [CMakeFiles/cmTC_e3c46.dir/build.make:99: cmTC_e3c46] Error 1
+make[1]: Leaving directory '/mnt/c/Users/jacky/Desktop/simple_multi/fed-gen/workers4_ros/src-gen/federate__client__2/build/CMakeFiles/CMakeScratch/TryCompile-2Hshnb'
+make: *** [Makefile:127: cmTC_e3c46/fast] Error 2
+
+
+Source file was:
+#include <pthread.h>
+
+static void* test_func(void* data)
+{
+  return data;
+}
+
+int main(void)
+{
+  pthread_t thread;
+  pthread_create(&thread, NULL, test_func, NULL);
+  pthread_detach(thread);
+  pthread_cancel(thread);
+  pthread_join(thread, NULL);
+  pthread_atfork(NULL, NULL, NULL);
+  pthread_exit(NULL);
+
+  return 0;
+}
+
+
+Determining if the function pthread_create exists in the pthreads failed with the following output:
+Change Dir: /mnt/c/Users/jacky/Desktop/simple_multi/fed-gen/workers4_ros/src-gen/federate__client__2/build/CMakeFiles/CMakeScratch/TryCompile-cLhcs9
+
+Run Build Command(s):/usr/bin/make -f Makefile cmTC_d40d9/fast && /usr/bin/make  -f CMakeFiles/cmTC_d40d9.dir/build.make CMakeFiles/cmTC_d40d9.dir/build
+make[1]: Entering directory '/mnt/c/Users/jacky/Desktop/simple_multi/fed-gen/workers4_ros/src-gen/federate__client__2/build/CMakeFiles/CMakeScratch/TryCompile-cLhcs9'
+Building C object CMakeFiles/cmTC_d40d9.dir/CheckFunctionExists.c.o
+/usr/bin/gcc   -DCHECK_FUNCTION_EXISTS=pthread_create -fPIE -std=gnu11 -o CMakeFiles/cmTC_d40d9.dir/CheckFunctionExists.c.o -c /mnt/c/Users/jacky/Desktop/simple_multi/fed-gen/workers4_ros/src-gen/federate__client__2/build/CMakeFiles/CMakeScratch/TryCompile-cLhcs9/CheckFunctionExists.c
+Linking C executable cmTC_d40d9
+/usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_d40d9.dir/link.txt --verbose=1
+/usr/bin/gcc  -DCHECK_FUNCTION_EXISTS=pthread_create CMakeFiles/cmTC_d40d9.dir/CheckFunctionExists.c.o -o cmTC_d40d9  -lpthreads 
+/usr/bin/ld: cannot find -lpthreads
+collect2: error: ld returned 1 exit status
+make[1]: *** [CMakeFiles/cmTC_d40d9.dir/build.make:99: cmTC_d40d9] Error 1
+make[1]: Leaving directory '/mnt/c/Users/jacky/Desktop/simple_multi/fed-gen/workers4_ros/src-gen/federate__client__2/build/CMakeFiles/CMakeScratch/TryCompile-cLhcs9'
+make: *** [Makefile:127: cmTC_d40d9/fast] Error 2
+
+
+
